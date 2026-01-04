@@ -13,16 +13,23 @@ function EmbeddingPlot({ data }) {
             x: data.map(p => p.x),
             y: data.map(p => p.y),
             text: data.map(p => p.word),
-            mode: 'lines+markers',
+            // Changed from 'lines+markers' to 'markers'
+            mode: 'markers',
             type: 'scatter',
             marker: {
               size: 10,
               color: data.map((_, i) => i),
-              colorscale: 'Viridis'
-            },
-            line: {
-              width: 2
+              colorscale: 'Viridis',
+              showscale: true,
+              colorbar: {
+                title: {
+                  text: 'Word Index',
+                  side: 'right'
+                }
+              }
             }
+
+            // Line object removed here
           }
         ]}
         layout={{
@@ -276,11 +283,19 @@ function App() {
               </div>
             )}
 
-            {/* Main Game Area */}
-            {gameState === 'WON' ? (
+              {/* Main Game Area */}
+              {gameState === 'WON' ? (
               <div style={styles.winScreen}>
                 <div style={styles.winIcon}>🏆</div>
                 <h2 style={styles.winTitle}>Target Reached!</h2>
+                
+                {/* 👇 Add the Plot Component here */}
+                {currentData?.plot && (
+                  <div style={{ width: '100%', maxWidth: '900px', marginBottom: '30px' }}>
+                    <EmbeddingPlot data={currentData.plot} />
+                  </div>
+                )}
+
                 <p style={styles.winMessage}>
                   Successfully navigated from <strong>{history[0]}</strong> to <strong>{targetTitle}</strong><br />
                   in <span style={styles.winHighlight}>{history.length - 1}</span> semantic leaps.
@@ -291,7 +306,7 @@ function App() {
                   </button>
                 </div>
               </div>
-            ) : (
+              ) :(
               <div style={styles.gameArea}>
                 {loading ? (
                   <div style={styles.loadingState}>

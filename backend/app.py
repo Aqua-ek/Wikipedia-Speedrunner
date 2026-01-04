@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 import torch
 from sklearn.decomposition import PCA
 import numpy as np
+from urllib.parse import unquote
 
 app = Flask(__name__)
 CORS(app)
@@ -30,7 +31,7 @@ def reduce_to_2d(words, embeddings):
 
     return [
         {
-            "word": word,
+            "word": unquote(word),
             "x": float(vec[0]),
             "y": float(vec[1])
         }
@@ -40,7 +41,7 @@ def reduce_to_2d(words, embeddings):
 
 def scrape_and_rank(current_page_slug, target_title, limit=30):
     global visited
-    global visted_list
+    global visited_list
     visited.add(current_page_slug)
     visited_list.append(current_page_slug)
 
