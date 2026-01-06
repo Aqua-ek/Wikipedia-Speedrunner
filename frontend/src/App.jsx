@@ -2,6 +2,88 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import Plot from 'react-plotly.js';
 
+function VelocityChart({ velocityData }) {
+  if (!velocityData || velocityData.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: '20px', padding: '15px', background: '#1e293b', borderRadius: '12px' }}>
+      <h3 style={{ color: '#f8fafc', fontSize: '14px', marginBottom: '10px' }}>Semantic Velocity (Progress per Step)</h3>
+      <Plot
+        data={[
+          {
+            x: velocityData.map((_, i) => `Step ${i + 1}`),
+            y: velocityData,
+            type: 'bar',
+            marker: {
+              color: velocityData.map(v => v > 0.15 ? '#10b981' : '#3b82f6'), // Green for breakthroughs
+            },
+          }
+        ]}
+        layout={{
+          height: 200,
+          paper_bgcolor: 'rgba(0,0,0,0)',
+          plot_bgcolor: 'rgba(0,0,0,0)',
+          margin: { t: 10, l: 30, r: 10, b: 30 },
+          font: { color: '#94a3b8', size: 10 },
+          xaxis: { gridcolor: '#334155' },
+          yaxis: { title: 'Δ Similarity', gridcolor: '#334155' }
+        }}
+        config={{ displayModeBar: false }}
+        style={{ width: '100%' }}
+      />
+    </div>
+  );
+}
+
+function EmbeddingPlot3D({ data }) {
+  if (!data || data.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: '40px', width: '100%' }}>
+      <Plot
+        data={[
+          {
+            x: data.map(p => p.x),
+            y: data.map(p => p.y),
+            z: data.map(p => p.z),
+            text: data.map(p => p.word),
+            mode: 'lines+markers',
+            type: 'scatter3d',
+            marker: {
+              size: 5,
+              color: data.map((_, i) => i), // Color by sequence
+              colorscale: 'Viridis',
+              opacity: 0.8
+            },
+            line: {
+              width: 4,
+              color: '#3b82f6',
+              opacity: 0.5
+            },
+            hoverinfo: 'text'
+          }
+        ]}
+        layout={{
+          title: '3D Semantic Path Exploration',
+          paper_bgcolor: '#0f172a',
+          font: { color: '#f8fafc' },
+          scene: {
+            xaxis: { title: 'PC1', gridcolor: '#334155', zeroline: false },
+            yaxis: { title: 'PC2', gridcolor: '#334155', zeroline: false },
+            zaxis: { title: 'PC3', gridcolor: '#334155', zeroline: false },
+            bgcolor: '#0f172a',
+          },
+          margin: { t: 50, l: 0, r: 0, b: 0 },
+          autosize: true
+        }}
+        style={{ width: '100%', height: '600px' }}
+        useResizeHandler
+        config={{ displayModeBar: true }}
+      />
+    </div>
+  );
+}
+
 function EmbeddingPlot({ data }) {
   if (!data || data.length === 0) return null;
 
@@ -66,6 +148,7 @@ function App() {
   const [currentData, setCurrentData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [velocityHistory, setVelocityHistory] = useState([]);
 
     const formatSlug = (txt) => txt.trim().replace(/\s+/g, '_');
 
@@ -75,6 +158,7 @@ function App() {
     setGameState('PLAYING');
     setHistory([]);
     setCurrentData(null);
+    setVelocityHistory([]); // Clear old velocity data
     setError('');
 
     await fetchNextStep(formatSlug(startSlug));
@@ -87,13 +171,10 @@ function App() {
     setError('');
 
     try {
-      const response = await axios.post(
-        'http://127.0.0.1:5000/api/step',
-        {
-          current: slug,
-          target: targetTitle
-        }
-      );
+      const response = await axios.post('http://127.0.0.1:5000/api/step', {
+        current: slug,
+        target: targetTitle
+      });
 
       if (response.data.error) {
         setError(response.data.error);
@@ -102,21 +183,19 @@ function App() {
       }
 
       const pageTitle = response.data.current_title;
-
       setHistory(prev => [...prev, pageTitle]);
       setCurrentData(response.data);
 
-      // ✅ Backend decides when game ends
       if (response.data.done === true) {
         setGameState('WON');
+        // ✅ Capture the velocity list from backend
+        setVelocityHistory(response.data.velocity || []);
         setLoading(false);
         return;
       }
-
     } catch (err) {
       setError('Failed to connect to the AI engine.');
     }
-
     setLoading(false);
   };
 
@@ -138,6 +217,7 @@ function App() {
     setTargetTitle('');
     setHistory([]);
     setCurrentData(null);
+    setVelocityHistory([]);
     setError('');
   };
 
@@ -290,15 +370,26 @@ function App() {
                 <h2 style={styles.winTitle}>Target Reached!</h2>
                 
                 {/* 👇 Add the Plot Component here */}
-                {currentData?.plot && (
-                  <div style={{ width: '100%', maxWidth: '900px', marginBottom: '30px' }}>
-                    <EmbeddingPlot data={currentData.plot} />
+                {currentData?.plot_3d && (
+                  <div style={{ width: '100%', maxWidth: '1000px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    
+                    {/* 1. New 3D Spatial Plot */}
+                    <EmbeddingPlot3D data={currentData.plot_3d} />
+
+                    {/* 2. Original 2D Plot (Optional, for comparison) */}
+                    <div style={{ opacity: 0.7 }}>
+                        <h4 style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center' }}>2D Projection (PC1 vs PC2)</h4>
+                        <EmbeddingPlot data={currentData.plot} />
+                    </div>
+
+                    {/* 3. Velocity Chart */}
+                    <VelocityChart velocityData={velocityHistory} />
+                    
                   </div>
                 )}
-
                 <p style={styles.winMessage}>
                   Successfully navigated from <strong>{history[0]}</strong> to <strong>{targetTitle}</strong><br />
-                  in <span style={styles.winHighlight}>{history.length - 1}</span> semantic leaps.
+                    in <span style={styles.winHighlight}>{history.length - 1}</span> semantic leaps.
                 </p>
                 <div style={styles.winActions}>
                   <button style={styles.winButton} onClick={resetGame}>

@@ -7,6 +7,7 @@ import torch
 from sklearn.decomposition import PCA
 import numpy as np
 from urllib.parse import unquote
+from umap import UMAP
 
 app = Flask(__name__)
 CORS(app)
@@ -18,6 +19,11 @@ print("Model Loaded.")
 visited = set()
 visited_embedding = []
 visited_list = []
+previous_velocity_score = 0.0
+velocity_tracker = []
+headers = {
+    "User-Agent": "WikipediaSpeedrunner/0.2 (educational project)"
+}
 
 
 def get_wiki_title(url):
@@ -39,9 +45,27 @@ def reduce_to_2d(words, embeddings):
     ]
 
 
+def reduce_to_3d(words, embeddings):
+    pca = PCA(n_components=3)
+    reduced = pca.fit_transform(embeddings)
+
+    return [
+        {
+            "word": unquote(word),
+            "x": float(vec[0]),
+            "y": float(vec[1]),
+            "z": float(vec[2])
+        }
+        for word, vec in zip(words, reduced)
+    ]
+
+
 def scrape_and_rank(current_page_slug, target_title, limit=30):
+    global headers
     global visited
     global visited_list
+    global previous_velocity_score
+    global velocity_tracker
     visited.add(current_page_slug)
     visited_list.append(current_page_slug)
 
@@ -53,23 +77,30 @@ def scrape_and_rank(current_page_slug, target_title, limit=30):
     if proper_url.lower() == target_url.lower():
         visited_embedding.append(target_emb)
         print(visited_list)
-        print(len(visited), len(visited_embedding), 'length')
+        print(len(visited), len(visited_embedding),
+              len(velocity_tracker), 'length')
         np_array_visited = np.array(visited_embedding)
         plot = reduce_to_2d(visited_list, np_array_visited)
+        plot_3d = reduce_to_3d(visited_list, np_array_visited)
+
+        # reset_values
         print(plot)
         visited_embedding.clear()
         visited.clear()
         visited_list.clear()
+        temp_hold = list(velocity_tracker)
+        velocity_tracker.clear()
+        previous_velocity_score = 0.0
+
         return {
             "current_title": f'{target_title}',
             "links": [],
             "done": True,
-            "plot": plot
+            "plot": plot,
+            "velocity": temp_hold,
+            "plot_3d": plot_3d
         }
 
-    headers = {
-        "User-Agent": "WikipediaSpeedrunner/0.2 (educational project)"
-    }
     try:
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code != 200:
@@ -109,6 +140,11 @@ def scrape_and_rank(current_page_slug, target_title, limit=30):
         )
 
         scores = util.cos_sim(target_emb, corpus_embs)[0]
+        print(torch.max(scores).item())
+        current_page_score = torch.max(scores)
+        velocity_tracker.append(
+            round(float(current_page_score-previous_velocity_score), 4))
+        previous_velocity_score = current_page_score
         sorted_indices = torch.argsort(scores, descending=True)
         visited_embedding.append(corpus_embs[sorted_indices[0].item()])
 
